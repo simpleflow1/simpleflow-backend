@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 {
   "name": "simpleflow-backend",
   "version": "1.0.0",
@@ -10,3 +11,19 @@
     "cors": "^2.8.5"
   }
 }
+=======
+{
+  "name": "simpleflow-backend",
+  "version": "1.0.0",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.34.6"
+  }
+}
+>>>>>>> 5bc90de (primeiro commit)
