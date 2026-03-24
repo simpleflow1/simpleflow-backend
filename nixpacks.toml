@@ -1,2 +1,8 @@
 [phases.setup]
-nixPkgs = ["...", "chromium", "nss", "freetype", "harfbuzz", "ca-certificates"]
+nixPkgs = ["nodePackages.npm", "chromium", "nss", "freetype", "harfbuzz", "ca-certificates", "libglvnd", "mesa"]
+
+[phases.build]
+cmds = ["npm install"]
+
+[start]
+cmd = "node src/server.js"
