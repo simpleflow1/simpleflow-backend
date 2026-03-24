@@ -22,9 +22,10 @@ const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
+        // No Docker do Linux, o caminho padrão é este:
+        executablePath: '/usr/bin/chromium',
         args: [
-            '--no-sandbox',
+            '--no-sandbox', 
             '--disable-setuid-sandbox',
             '--disable-dev-shm-usage'
         ]

@@ -1,6 +1,6 @@
 FROM node:20-slim
 
-# Instala dependências do Chromium para Linux
+# Instala o Chromium e bibliotecas de sistema necessárias
 RUN apt-get update && apt-get install -y \
     chromium \
     fonts-freefont-ttf \
@@ -14,7 +14,5 @@ COPY package*.json ./
 RUN npm install
 COPY . .
 
-# Variável para o Puppeteer encontrar o Chrome no Docker
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-
+# Comando para iniciar o servidor
 CMD ["node", "src/server.js"]
