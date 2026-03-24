@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["nodePackages.npm", "chromium", "nss", "freetype", "harfbuzz", "ca-certificates"]
+nixPkgs = ["nodejs", "chromium", "nss", "freetype", "harfbuzz", "ca-certificates"]
 
 [phases.build]
 cmds = ["npm install"]
