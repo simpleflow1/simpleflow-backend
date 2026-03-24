@@ -1,21 +1,20 @@
 FROM node:20
 
-# Instala dependências do Chromium para o WhatsApp funcionar no Linux
+# Instala as dependências de sistema corretas para o Chromium rodar no Linux
 RUN apt-get update && apt-get install -y \
     chromium \
-    fonts-freefont-ttf \
-    libxss1 \
-    libasound2 \
+    libnss3 \
+    libfreetype6 \
+    libharfbuzz0b \
+    ca-certificates \
+    libgl1 \
+    mesa-utils \
     --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-
-# Copia arquivos de dependências
 COPY package*.json ./
 RUN npm install
-
-# Copia o restante do código
 COPY . .
 
 # Comando para iniciar
