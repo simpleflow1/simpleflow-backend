@@ -22,16 +22,11 @@ const io = new Server(server, {
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-        // Tenta o caminho da variável, se não existir, tenta 'chromium' ou o padrão do sistema
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || 'chromium' || '/usr/bin/chromium',
-        args: [
-            '--no-sandbox', 
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-gpu'
-        ]
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || 'chromium',
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
     }
 });
+
 
 // Quando o QR Code é gerado
 client.on('qr', (qr) => {
