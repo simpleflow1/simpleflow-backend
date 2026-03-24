@@ -2,70 +2,60 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const qrcode = require('qrcode');
+const QRCode = require('qrcode'); // Importação correta
 const cors = require('cors');
 
 const app = express();
 const server = http.createServer(app);
 
-// 1. Liberação de CORS para o Express
-app.use(cors({
-    origin: "*",
-    methods: ["GET", "POST"]
-}));
+app.use(cors());
 app.use(express.json());
 
-// 2. Liberação de CORS para o Socket.io (O mais importante para o QR aparecer)
+// --- NOVIDADE DO PASSO 2 ---
+let qrCodeBase64 = null; 
+
 const io = new Server(server, {
-    path: "/socket.io/", // Garante o caminho padrão
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"],
-        credentials: true
-    },
-    transports: ['websocket', 'polling'] // Tenta todas as formas de conexão
+    cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
-// 3. Configuração do Cliente WhatsApp otimizada para Docker/Railway
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-        headless: true,
         executablePath: '/usr/bin/chromium',
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage',
-            '--disable-accelerated-2d-canvas',
-            '--no-first-run',
-            '--no-zygote',
-            '--disable-gpu'
-        ]
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
     }
 });
 
-// Quando o QR Code é gerado
-client.on('qr', (qr) => {
-    console.log('QR RECEIVED', qr); // Se isso aparecer no LOG do Railway, o QR está sendo gerado!
-    qrcode.toDataURL(qr, (err, url) => {
-        io.emit('qr', url); // Envia o QR Code para a tela da Lovable
-    });
+// --- NOVIDADE DO PASSO 2 (ADAPTADO) ---
+client.on('qr', async (qr) => {
+    console.log('QR RECEIVED');
+    // Salva o QR Code na variável para a rota /qr
+    qrCodeBase64 = await QRCode.toDataURL(qr);
+    // Também envia via socket (garante os dois jeitos)
+    io.emit('qr', qrCodeBase64);
 });
 
-// Quando o WhatsApp conecta
 client.on('ready', () => {
     console.log('WhatsApp Conectado!');
+    qrCodeBase64 = null; // Limpa o QR quando conecta
     io.emit('ready', true);
 });
 
-// Inicialização
-client.initialize().catch(err => console.error('Erro ao inicializar WhatsApp:', err));
+// --- PASSO 3: CRIAR ROTA DO QR ---
+app.get('/qr', (req, res) => {
+  if (!qrCodeBase64) {
+    return res.json({ status: 'Aguardando QR Code... Tente em 30 segundos.' });
+  }
+  res.json({ qr: qrCodeBase64 });
+});
 
 app.get('/', (req, res) => {
-    res.send('Backend do SimpleFlow com WhatsApp ativo! 🚀');
+    res.send('Servidor Ativo 🚀 - Acesse /qr para ver o código');
 });
+
+client.initialize().catch(err => console.error('Erro:', err));
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
+    console.log(`Rodando na porta ${PORT}`);
 });
