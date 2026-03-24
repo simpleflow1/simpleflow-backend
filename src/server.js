@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 const express = require('express');
 const cors = require('cors');
 
@@ -6,16 +5,14 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Rota inicial
 app.get('/', (req, res) => {
-  res.send('SimpleFlow backend rodando 🚀');
+    res.send('SimpleFlow backend rodando 🚀');
 });
 
-app.listen(3000, () => {
-  console.log('Servidor rodando na porta 3000');
-=======
-const { Client, LocalAuth } = require('whatsapp-web.js');
+// Configuração da porta para o Railway (process.env.PORT) ou local (3000)
+const PORT = process.env.PORT || 3000;
 
-const client = new Client({
-  authStrategy: new LocalAuth()
->>>>>>> 5bc90de (primeiro commit)
+app.listen(PORT, () => {
+    console.log(`Servidor rodando na porta ${PORT}`);
 });
