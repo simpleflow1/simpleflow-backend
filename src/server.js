@@ -22,12 +22,13 @@ const io = new Server(server, {
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-        // ESSA LINHA É A CHAVE: Ela diz ao código para usar o navegador instalado no Railway
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium',
+        // Tenta o caminho da variável, se não existir, tenta 'chromium' ou o padrão do sistema
+        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || 'chromium' || '/usr/bin/chromium',
         args: [
             '--no-sandbox', 
             '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage'
+            '--disable-dev-shm-usage',
+            '--disable-gpu'
         ]
     }
 });
