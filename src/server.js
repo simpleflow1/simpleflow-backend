@@ -8,30 +8,43 @@ const cors = require('cors');
 const app = express();
 const server = http.createServer(app);
 
-// Configuração do CORS para aceitar sua URL da Lovable
-app.use(cors());
+// 1. Liberação de CORS para o Express
+app.use(cors({
+    origin: "*",
+    methods: ["GET", "POST"]
+}));
 app.use(express.json());
 
+// 2. Liberação de CORS para o Socket.io (O mais importante para o QR aparecer)
 const io = new Server(server, {
     cors: {
-        origin: "*", // Permite que a Lovable conecte aqui
-        methods: ["GET", "POST"]
+        origin: "*",
+        methods: ["GET", "POST"],
+        credentials: true
     }
 });
 
+// 3. Configuração do Cliente WhatsApp otimizada para Docker/Railway
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-        executablePath: '/usr/bin/chromium', // Caminho padrão no Docker Linux
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
+        headless: true,
+        executablePath: '/usr/bin/chromium',
+        args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-accelerated-2d-canvas',
+            '--no-first-run',
+            '--no-zygote',
+            '--disable-gpu'
+        ]
     }
 });
 
-
-
 // Quando o QR Code é gerado
 client.on('qr', (qr) => {
-    console.log('QR RECEIVED', qr);
+    console.log('QR RECEIVED', qr); // Se isso aparecer no LOG do Railway, o QR está sendo gerado!
     qrcode.toDataURL(qr, (err, url) => {
         io.emit('qr', url); // Envia o QR Code para a tela da Lovable
     });
@@ -43,7 +56,8 @@ client.on('ready', () => {
     io.emit('ready', true);
 });
 
-client.initialize();
+// Inicialização
+client.initialize().catch(err => console.error('Erro ao inicializar WhatsApp:', err));
 
 app.get('/', (req, res) => {
     res.send('Backend do SimpleFlow com WhatsApp ativo! 🚀');
