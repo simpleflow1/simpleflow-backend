@@ -17,11 +17,13 @@ app.use(express.json());
 
 // 2. Liberação de CORS para o Socket.io (O mais importante para o QR aparecer)
 const io = new Server(server, {
+    path: "/socket.io/", // Garante o caminho padrão
     cors: {
         origin: "*",
         methods: ["GET", "POST"],
         credentials: true
-    }
+    },
+    transports: ['websocket', 'polling'] // Tenta todas as formas de conexão
 });
 
 // 3. Configuração do Cliente WhatsApp otimizada para Docker/Railway
