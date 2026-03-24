@@ -22,10 +22,11 @@ const io = new Server(server, {
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-        executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || 'chromium',
+        executablePath: '/usr/bin/chromium', // Caminho padrão no Docker Linux
         args: ['--no-sandbox', '--disable-setuid-sandbox']
     }
 });
+
 
 
 // Quando o QR Code é gerado
