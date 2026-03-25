@@ -5,7 +5,8 @@ const { Server } = require('socket.io');
 const QRCode = require('qrcode');
 const cors = require('cors');
 const pino = require('pino');
-const fs = require('fs'); // Adicionado para limpar a pasta se necessário
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
@@ -21,7 +22,7 @@ const io = new Server(server, {
 
 let qrCodeBase64 = null;
 let isConnected = false;
-let sock = null; // Mudei para cá para ser acessível globalmente
+let sock = null;
 
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
@@ -58,13 +59,30 @@ async function connectToWhatsApp() {
                 console.log("Reconectando...");
                 connectToWhatsApp();
             } else {
-                console.log("❌ Sessão encerrada. Limpando dados...");
+                console.log("❌ Sessão encerrada. Limpando arquivos internos...");
                 qrCodeBase64 = null;
-                // Opcional: Apagar pasta para garantir economia total
-                if (fs.existsSync('./auth_info_baileys')) {
-                    fs.rmSync('./auth_info_baileys', { recursive: true, force: true });
+                
+                // CORREÇÃO EBUSY: Limpa arquivos dentro da pasta sem deletar a pasta (Volume)
+                const sessionDir = './auth_info_baileys';
+                if (fs.existsSync(sessionDir)) {
+                    const files = fs.readdirSync(sessionDir);
+                    for (const file of files) {
+                        try {
+                            fs.unlinkSync(path.join(sessionDir, file));
+                        } catch (e) {
+                            console.error(`Erro ao deletar arquivo ${file}:`, e.message);
+                        }
+                    }
+                    console.log("Arquivos de sessão removidos. Pronto para novo QR.");
                 }
+                
                 io.emit('ready', false);
+                io.emit('qr', null);
+
+                // Força a geração de um novo QR Code após a limpeza
+                setTimeout(() => {
+                    connectToWhatsApp();
+                }, 3000);
             }
         } else if (connection === 'open') {
             console.log('🚀 WHATSAPP CONECTADO!');
@@ -84,11 +102,10 @@ app.get('/status', (req, res) => {
     res.json({ connected: isConnected });
 });
 
-// NOVA ROTA: Desconectar dispositivo e economizar Railway
 app.post('/disconnect', async (req, res) => {
     try {
         if (sock) {
-            await sock.logout(); // Desloga do WhatsApp
+            await sock.logout(); 
             sock = null;
             isConnected = false;
             qrCodeBase64 = null;
