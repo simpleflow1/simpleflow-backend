@@ -11,10 +11,11 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 
-// IMPORTANTE: Adicione estas duas linhas para o servidor entender o texto enviado pela Lovable
+// Middlewares essenciais
 app.use(express.json());
 app.use(cors());
 
+// Configuração do Socket.io para estabilidade no Railway
 const io = new Server(server, {
     cors: { origin: "*", methods: ["GET", "POST"] },
     pingTimeout: 60000,
@@ -26,7 +27,7 @@ let qrCodeBase64 = null;
 let isConnected = false;
 let sock = null;
 
-// Função para limpar arquivos de sessão (Volume do Railway)
+// Função para limpar arquivos de sessão no Volume do Railway
 function clearSessionFolder() {
     const sessionDir = path.join(__dirname, 'auth_info_baileys');
     if (fs.existsSync(sessionDir)) {
@@ -35,8 +36,10 @@ function clearSessionFolder() {
             for (const file of files) {
                 try { fs.unlinkSync(path.join(sessionDir, file)); } catch (e) {}
             }
-            console.log("🧹 Volume limpo.");
-        } catch (err) {}
+            console.log("🧹 Volume de sessão limpo com sucesso.");
+        } catch (err) {
+            console.error("Erro ao limpar volume:", err);
+        }
     }
 }
 
@@ -58,20 +61,25 @@ async function connectToWhatsApp() {
 
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
+        
         if (qr) {
             qrCodeBase64 = await QRCode.toDataURL(qr);
             isConnected = false;
             io.emit('qr', qrCodeBase64); 
             console.log('✅ QR CODE GERADO');
         }
+
         if (connection === 'close') {
             isConnected = false;
             const statusCode = lastDisconnect?.error?.output?.statusCode;
+            
             if (statusCode === DisconnectReason.loggedOut) {
+                console.log("❌ Sessão encerrada. Resetando...");
                 qrCodeBase64 = null;
                 clearSessionFolder();
                 setTimeout(() => connectToWhatsApp(), 3000);
             } else {
+                console.log("🔄 Reconectando automaticamente...");
                 connectToWhatsApp();
             }
         } else if (connection === 'open') {
@@ -79,17 +87,23 @@ async function connectToWhatsApp() {
             qrCodeBase64 = null;
             isConnected = true;
             io.emit('ready', true);
+            io.emit('qr', null);
         }
     });
 }
 
 // --- ROTAS DA API ---
 
+// ROTA INICIAL (Para evitar o erro "Cannot GET /")
+app.get('/', (req, res) => {
+    res.send('🚀 SimpleFlow Backend está Online e Operacional!');
+});
+
 app.get('/status', (req, res) => res.json({ connected: isConnected }));
 
 app.get('/qr', (req, res) => res.json({ qr: qrCodeBase64 }));
 
-// ROTA DE ENVIO: Esta é a que estava faltando para o seu botão funcionar!
+// Rota de envio de mensagens
 app.post('/send-message', async (req, res) => {
     const { number, message } = req.body;
     console.log(`Tentando enviar para: ${number}`);
@@ -99,7 +113,6 @@ app.post('/send-message', async (req, res) => {
     }
 
     try {
-        // Limpa o número e formata para o padrão do WhatsApp
         const cleanNumber = number.replace(/\D/g, '');
         const jid = `${cleanNumber}@s.whatsapp.net`;
         
@@ -112,7 +125,12 @@ app.post('/send-message', async (req, res) => {
 });
 
 app.post('/disconnect', async (req, res) => {
-    if (sock) { await sock.logout().catch(() => {}); sock.end(); sock = null; }
+    console.log("Solicitação de desconexão recebida.");
+    if (sock) { 
+        await sock.logout().catch(() => {}); 
+        sock.end(); 
+        sock = null; 
+    }
     clearSessionFolder();
     isConnected = false;
     res.json({ success: true });
@@ -120,8 +138,10 @@ app.post('/disconnect', async (req, res) => {
 
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
+// --- INICIALIZAÇÃO ---
+
 const PORT = process.env.PORT || 8080;
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Servidor na porta ${PORT}`);
+    console.log(`🚀 Servidor rodando na porta ${PORT}`);
     setTimeout(() => connectToWhatsApp(), 5000); 
 });
