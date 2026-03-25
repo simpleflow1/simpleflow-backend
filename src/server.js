@@ -1,68 +1,66 @@
+const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion, makeCacheableSignalKeyStore } = require('@whiskeysockets/baileys');
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const QRCode = require('qrcode'); // Importação correta
+const QRCode = require('qrcode');
 const cors = require('cors');
+const pino = require('pino');
 
 const app = express();
 const server = http.createServer(app);
-
 app.use(cors());
-app.use(express.json());
-
-// --- NOVIDADE DO PASSO 2 ---
-let qrCodeBase64 = null; 
 
 const io = new Server(server, {
     cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
-const client = new Client({
-    authStrategy: new LocalAuth(),
-    puppeteer: {
-        headless: true,
-        executablePath: '/usr/bin/chromium',
-        args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage', // ESTA LINHA É A CHAVE
-            '--disable-gpu',
-            '--no-zygote'
-        ]
-    }
-});
+let qrCodeBase64 = null;
 
-// --- NOVIDADE DO PASSO 2 (ADAPTADO) ---
-client.on('qr', async (qr) => {
-    console.log('QR RECEIVED');
-    // Salva o QR Code na variável para a rota /qr
-    qrCodeBase64 = await QRCode.toDataURL(qr);
-    // Também envia via socket (garante os dois jeitos)
-    io.emit('qr', qrCodeBase64);
-});
+async function connectToWhatsApp() {
+    const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
+    const { version } = await fetchLatestBaileysVersion();
 
-client.on('ready', () => {
-    console.log('WhatsApp Conectado!');
-    qrCodeBase64 = null; // Limpa o QR quando conecta
-    io.emit('ready', true);
-});
+    const sock = makeWASocket({
+        version,
+        auth: {
+            creds: state.creds,
+            keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'silent' })),
+        },
+        printQRInTerminal: true,
+        browser: ["SimpleFlow", "MacOS", "3.0"]
+    });
 
-// --- PASSO 3: CRIAR ROTA DO QR ---
+    sock.ev.on('creds.update', saveCreds);
+
+    sock.ev.on('connection.update', async (update) => {
+        const { connection, lastDisconnect, qr } = update;
+
+        if (qr) {
+            qrCodeBase64 = await QRCode.toDataURL(qr);
+            console.log('✅ QR CODE GERADO');
+            io.emit('qr', qrCodeBase64); // Envia em tempo real para a Lovable
+        }
+
+        if (connection === 'close') {
+            const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
+            if (shouldReconnect) connectToWhatsApp();
+        } else if (connection === 'open') {
+            console.log('🚀 WHATSAPP CONECTADO!');
+            qrCodeBase64 = null;
+            io.emit('ready', true);
+        }
+    });
+}
+
+// Rota auxiliar para a Lovable buscar o QR caso o Socket falhe
 app.get('/qr', (req, res) => {
-  if (!qrCodeBase64) {
-    return res.json({ status: 'Aguardando QR Code... Tente em 30 segundos.' });
-  }
-  res.json({ qr: qrCodeBase64 });
+    res.json({ qr: qrCodeBase64 });
 });
 
-app.get('/', (req, res) => {
-    res.send('Servidor Ativo 🚀 - Acesse /qr para ver o código');
-});
-
-client.initialize().catch(err => console.error('Erro:', err));
+app.get('/', (req, res) => res.send('SimpleFlow Baileys + Socket.io Online! 🚀'));
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, "0.0.0.0", () => {
-    console.log(`🚀 Servidor rodando na porta ${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Servidor rodando na porta ${PORT}`);
+    connectToWhatsApp();
 });
