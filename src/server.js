@@ -62,15 +62,21 @@ app.get('/qr', (req, res) => {
 
 app.get('/', (req, res) => res.send('SimpleFlow Baileys + Socket.io Online! 🚀'));
 
-// Substitua o final do seu arquivo por este bloco:
+// --- FINAL DO ARQUIVO server.js ---
+
 const PORT = process.env.PORT || 8080;
 
+// 1. Primeiro iniciamos o servidor para o Railway não dar erro
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Servidor pronto na porta ${PORT}`);
+    console.log(`🚀 Servidor EXPRESS ativo na porta ${PORT}`);
     
-    // Adicionamos este atraso de 5 segundos (5000ms)
+    // 2. Criamos uma rota de "saúde" para o Railway testar
+    app.get('/health', (req, res) => res.status(200).send('OK'));
+
+    // 3. Só depois de 10 segundos iniciamos o peso do WhatsApp
+    console.log("Aguardando 10 segundos para iniciar o Baileys...");
     setTimeout(() => {
-        console.log("Iniciando conexão com WhatsApp...");
-        connectToWhatsApp();
-    }, 5000); 
+        console.log("Iniciando conexão com WhatsApp agora...");
+        connectToWhatsApp().catch(err => console.error("Erro no Baileys:", err));
+    }, 10000); 
 });
