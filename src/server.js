@@ -16,7 +16,11 @@ const io = new Server(server, {
     cors: { 
         origin: "*", 
         methods: ["GET", "POST"] 
-    }
+    },
+    // Adicione estas 3 linhas abaixo para manter a conexão estável:
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    transports: ['websocket', 'polling']
 });
 
 let qrCodeBase64 = null;
