@@ -22,12 +22,13 @@ const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
         headless: true,
-        // No Docker do Linux, o caminho padrão é este:
         executablePath: '/usr/bin/chromium',
         args: [
-            '--no-sandbox', 
+            '--no-sandbox',
             '--disable-setuid-sandbox',
-            '--disable-dev-shm-usage'
+            '--disable-dev-shm-usage', // ESTA LINHA É A CHAVE
+            '--disable-gpu',
+            '--no-zygote'
         ]
     }
 });
