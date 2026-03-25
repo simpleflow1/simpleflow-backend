@@ -11,6 +11,8 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 
+// IMPORTANTE: Adicione estas duas linhas para o servidor entender o texto enviado pela Lovable
+app.use(express.json());
 app.use(cors());
 
 const io = new Server(server, {
@@ -24,23 +26,17 @@ let qrCodeBase64 = null;
 let isConnected = false;
 let sock = null;
 
-// FUNÇÃO PARA LIMPAR OS ARQUIVOS DO VOLUME SEM TRAVAR O BACKEND
+// Função para limpar arquivos de sessão (Volume do Railway)
 function clearSessionFolder() {
     const sessionDir = path.join(__dirname, 'auth_info_baileys');
     if (fs.existsSync(sessionDir)) {
         try {
             const files = fs.readdirSync(sessionDir);
             for (const file of files) {
-                try {
-                    fs.unlinkSync(path.join(sessionDir, file));
-                } catch (e) {
-                    // Ignora se o arquivo estiver bloqueado
-                }
+                try { fs.unlinkSync(path.join(sessionDir, file)); } catch (e) {}
             }
-            console.log("🧹 Volume limpo via código. Pronto para novo QR.");
-        } catch (err) {
-            console.log("Aviso: Erro ao ler pasta de sessão, mas seguindo...");
-        }
+            console.log("🧹 Volume limpo.");
+        } catch (err) {}
     }
 }
 
@@ -62,84 +58,70 @@ async function connectToWhatsApp() {
 
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
-
         if (qr) {
             qrCodeBase64 = await QRCode.toDataURL(qr);
             isConnected = false;
             io.emit('qr', qrCodeBase64); 
             console.log('✅ QR CODE GERADO');
         }
-
         if (connection === 'close') {
             isConnected = false;
             const statusCode = lastDisconnect?.error?.output?.statusCode;
-            
-            // Se o logout foi feito (botão ou celular)
             if (statusCode === DisconnectReason.loggedOut) {
-                console.log("❌ Sessão encerrada. Resetando volume...");
                 qrCodeBase64 = null;
-                io.emit('qr', null);
-                io.emit('ready', false);
-                
-                clearSessionFolder(); // Limpa os arquivos internos
-
-                setTimeout(() => {
-                    console.log("🔄 Gerando novo QR Code...");
-                    connectToWhatsApp();
-                }, 3000);
+                clearSessionFolder();
+                setTimeout(() => connectToWhatsApp(), 3000);
             } else {
-                console.log("🔄 Tentando reconectar automaticamente...");
-                setTimeout(() => connectToWhatsApp(), 5000);
+                connectToWhatsApp();
             }
         } else if (connection === 'open') {
             console.log('🚀 WHATSAPP CONECTADO!');
             qrCodeBase64 = null;
             isConnected = true;
             io.emit('ready', true);
-            io.emit('qr', null);
         }
     });
 }
 
-// --- ROTAS ---
-
-app.get('/', (req, res) => res.send('SimpleFlow Online! 🚀'));
+// --- ROTAS DA API ---
 
 app.get('/status', (req, res) => res.json({ connected: isConnected }));
 
 app.get('/qr', (req, res) => res.json({ qr: qrCodeBase64 }));
 
-app.post('/disconnect', async (req, res) => {
-    try {
-        console.log("Comando de desconexão recebido...");
-        if (sock) {
-            // Tenta deslogar, mas se falhar (já offline), ignora o erro
-            await sock.logout().catch(() => {}); 
-            sock.end();
-            sock = null;
-        }
-        
-        // Força a limpeza para garantir que o próximo deploy/boot peça o QR
-        clearSessionFolder();
-        isConnected = false;
-        qrCodeBase64 = null;
-        
-        res.json({ success: true, message: "Resetando conexão..." });
-    } catch (err) {
-        console.error("Erro no disconnect:", err);
-        res.json({ success: true, message: "Reset forçado" });
+// ROTA DE ENVIO: Esta é a que estava faltando para o seu botão funcionar!
+app.post('/send-message', async (req, res) => {
+    const { number, message } = req.body;
+    console.log(`Tentando enviar para: ${number}`);
+
+    if (!isConnected || !sock) {
+        return res.status(500).json({ error: "WhatsApp não conectado" });
     }
+
+    try {
+        // Limpa o número e formata para o padrão do WhatsApp
+        const cleanNumber = number.replace(/\D/g, '');
+        const jid = `${cleanNumber}@s.whatsapp.net`;
+        
+        await sock.sendMessage(jid, { text: message });
+        res.json({ success: true });
+    } catch (err) {
+        console.error("Erro no envio:", err);
+        res.status(500).json({ error: "Falha ao enviar" });
+    }
+});
+
+app.post('/disconnect', async (req, res) => {
+    if (sock) { await sock.logout().catch(() => {}); sock.end(); sock = null; }
+    clearSessionFolder();
+    isConnected = false;
+    res.json({ success: true });
 });
 
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
-// --- INICIALIZAÇÃO ---
-
 const PORT = process.env.PORT || 8080;
-
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Servidor na porta ${PORT}`);
-    setTimeout(() => {
-        connectToWhatsApp().catch(err => console.error("Erro no boot:", err));
-    }, 5000); 
+    setTimeout(() => connectToWhatsApp(), 5000); 
 });
