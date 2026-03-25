@@ -53,36 +53,30 @@ async function connectToWhatsApp() {
         if (connection === 'close') {
             isConnected = false;
             const statusCode = lastDisconnect?.error?.output?.statusCode;
-            const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-
-            if (shouldReconnect) {
-                console.log("Reconectando...");
-                connectToWhatsApp();
-            } else {
-                console.log("❌ Sessão encerrada. Limpando arquivos internos...");
+            
+            // Se for logout voluntário ou erro de sessão, limpamos e forçamos REINÍCIO
+            if (statusCode === DisconnectReason.loggedOut) {
+                console.log("❌ Sessão encerrada pelo usuário/WhatsApp. Limpando arquivos...");
                 qrCodeBase64 = null;
                 
-                // CORREÇÃO EBUSY: Limpa arquivos dentro da pasta sem deletar a pasta (Volume)
                 const sessionDir = './auth_info_baileys';
                 if (fs.existsSync(sessionDir)) {
                     const files = fs.readdirSync(sessionDir);
                     for (const file of files) {
                         try {
                             fs.unlinkSync(path.join(sessionDir, file));
-                        } catch (e) {
-                            console.error(`Erro ao deletar arquivo ${file}:`, e.message);
-                        }
+                        } catch (e) { /* arquivo preso, ignorar */ }
                     }
-                    console.log("Arquivos de sessão removidos. Pronto para novo QR.");
                 }
                 
                 io.emit('ready', false);
                 io.emit('qr', null);
 
-                // Força a geração de um novo QR Code após a limpeza
-                setTimeout(() => {
-                    connectToWhatsApp();
-                }, 3000);
+                // FORÇA O REINÍCIO PARA GERAR NOVO QR
+                setTimeout(() => connectToWhatsApp(), 3000);
+            } else {
+                console.log("Reconectando automaticamente...");
+                connectToWhatsApp();
             }
         } else if (connection === 'open') {
             console.log('🚀 WHATSAPP CONECTADO!');
@@ -105,13 +99,14 @@ app.get('/status', (req, res) => {
 app.post('/disconnect', async (req, res) => {
     try {
         if (sock) {
-            await sock.logout(); 
+            console.log("Comando de desconexão recebido...");
+            await sock.logout().catch(() => {}); // Tenta deslogar no WhatsApp
+            sock.end(); // Mata a conexão atual
             sock = null;
             isConnected = false;
             qrCodeBase64 = null;
-            console.log("Sessão encerrada pelo usuário.");
         }
-        res.json({ success: true, message: "Desconectado com sucesso" });
+        res.json({ success: true, message: "Desconectado. O servidor gerará um novo QR em instantes." });
     } catch (err) {
         console.error("Erro ao desconectar:", err);
         res.status(500).json({ error: "Erro ao desconectar" });
@@ -120,13 +115,9 @@ app.post('/disconnect', async (req, res) => {
 
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
-// --- INICIALIZAÇÃO ---
-
 const PORT = process.env.PORT || 8080;
 
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Servidor na porta ${PORT}`);
-    setTimeout(() => {
-        connectToWhatsApp().catch(err => console.error(err));
-    }, 5000); 
+    setTimeout(() => connectToWhatsApp(), 5000); 
 });
