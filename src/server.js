@@ -14,10 +14,15 @@ const server = http.createServer(app);
 app.use(cors());
 
 const io = new Server(server, {
-    cors: { origin: "*", methods: ["GET", "POST"] },
+    cors: { 
+        origin: "*", 
+        methods: ["GET", "POST"],
+        credentials: true
+    },
+    allowEIO3: true, // Garante compatibilidade com versões diferentes do Socket.io
     pingTimeout: 60000,
     pingInterval: 25000,
-    transports: ['websocket', 'polling']
+    transports: ['websocket', 'polling'] // Tenta WebSocket primeiro, se falhar usa Polling
 });
 
 let qrCodeBase64 = null;
