@@ -62,8 +62,15 @@ app.get('/qr', (req, res) => {
 
 app.get('/', (req, res) => res.send('SimpleFlow Baileys + Socket.io Online! 🚀'));
 
-const PORT = process.env.PORT || 3000;
+// Substitua o final do seu arquivo por este bloco:
+const PORT = process.env.PORT || 8080;
+
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
-    connectToWhatsApp();
+    console.log(`🚀 Servidor pronto na porta ${PORT}`);
+    
+    // Adicionamos este atraso de 5 segundos (5000ms)
+    setTimeout(() => {
+        console.log("Iniciando conexão com WhatsApp...");
+        connectToWhatsApp();
+    }, 5000); 
 });
