@@ -5,29 +5,46 @@ const { Server } = require('socket.io');
 const QRCode = require('qrcode');
 const cors = require('cors');
 const pino = require('pino');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
 
-// Configuração de CORS para Express e Socket.io
 app.use(cors());
 
 const io = new Server(server, {
-    cors: { 
-        origin: "*", 
-        methods: ["GET", "POST"] 
-    }
+    cors: { origin: "*", methods: ["GET", "POST"] },
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    transports: ['websocket', 'polling']
 });
 
 let qrCodeBase64 = null;
-let isConnected = false; // Controle de status real
+let isConnected = false;
+let sock = null;
+
+// FUNÇÃO PARA LIMPAR OS ARQUIVOS DO VOLUME SEM APAGAR A PASTA
+function clearSessionFolder() {
+    const sessionDir = './auth_info_baileys';
+    if (fs.existsSync(sessionDir)) {
+        const files = fs.readdirSync(sessionDir);
+        for (const file of files) {
+            try {
+                fs.unlinkSync(path.join(sessionDir, file));
+            } catch (e) {
+                console.log(`Arquivo ${file} estava sendo usado, ignorando...`);
+            }
+        }
+        console.log("🧹 Volume limpo via código. Pronto para novo QR.");
+    }
+}
 
 async function connectToWhatsApp() {
-    // A pasta 'auth_info_baileys' deve estar no seu VOLUME do Railway
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
     const { version } = await fetchLatestBaileysVersion();
 
-    const sock = makeWASocket({
+    sock = makeWASocket({
         version,
         auth: {
             creds: state.creds,
@@ -45,19 +62,29 @@ async function connectToWhatsApp() {
         if (qr) {
             qrCodeBase64 = await QRCode.toDataURL(qr);
             isConnected = false;
-            console.log('✅ QR CODE GERADO');
             io.emit('qr', qrCodeBase64); 
+            console.log('✅ QR CODE GERADO');
         }
 
         if (connection === 'close') {
             isConnected = false;
-            const shouldReconnect = lastDisconnect.error?.output?.statusCode !== DisconnectReason.loggedOut;
-            if (shouldReconnect) {
-                connectToWhatsApp();
-            } else {
-                console.log("❌ Sessão encerrada. Limpando dados para novo login...");
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            
+            // Se o logout foi forçado (pelo botão ou celular)
+            if (statusCode === DisconnectReason.loggedOut) {
+                console.log("❌ Sessão encerrada. Resetando volume...");
                 qrCodeBase64 = null;
-                // Opcional: Se quiser que o sistema tente gerar novo QR após logout
+                io.emit('qr', null);
+                io.emit('ready', false);
+                
+                clearSessionFolder(); // Limpa o volume automaticamente
+
+                setTimeout(() => {
+                    console.log("🔄 Gerando novo QR Code...");
+                    connectToWhatsApp();
+                }, 3000);
+            } else {
+                console.log("Reconectando...");
                 connectToWhatsApp();
             }
         } else if (connection === 'open') {
@@ -65,41 +92,35 @@ async function connectToWhatsApp() {
             qrCodeBase64 = null;
             isConnected = true;
             io.emit('ready', true);
-            io.emit('qr', null); // Limpa o QR da tela
+            io.emit('qr', null);
         }
     });
 }
 
-// --- ROTAS DA API ---
+// --- ROTAS ---
 
-app.get('/', (req, res) => res.send('SimpleFlow Baileys + Socket.io Online! 🚀'));
+app.get('/status', (req, res) => res.json({ connected: isConnected }));
 
-// Rota para a Lovable buscar o QR manualmente
-app.get('/qr', (req, res) => {
-    res.json({ qr: qrCodeBase64 });
+app.post('/disconnect', async (req, res) => {
+    try {
+        if (sock) {
+            console.log("Comando de desconexão recebido...");
+            await sock.logout(); // Isso dispara o 'connection.update' com logout
+            sock = null;
+        }
+        res.json({ success: true });
+    } catch (err) {
+        // Se der erro no logout, forçamos a limpeza manual
+        clearSessionFolder();
+        connectToWhatsApp();
+        res.json({ success: true, message: "Reset forçado" });
+    }
 });
 
-// Rota para a Lovable verificar se já está conectado (acaba com o loop de verificando)
-app.get('/status', (req, res) => {
-    res.json({ 
-        connected: isConnected,
-        message: isConnected ? "WhatsApp Conectado" : "Aguardando QR Code"
-    });
-});
-
-// Rota de saúde para o Railway (Health Check)
-app.get('/health', (req, res) => res.status(200).send('OK'));
-
-// --- INICIALIZAÇÃO DO SERVIDOR ---
+app.get('/qr', (req, res) => res.json({ qr: qrCodeBase64 }));
 
 const PORT = process.env.PORT || 8080;
-
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`🚀 Servidor EXPRESS ativo na porta ${PORT}`);
-    
-    // Pequeno atraso para o Railway estabilizar antes do processo pesado do WhatsApp
-    setTimeout(() => {
-        console.log("Iniciando conexão com WhatsApp agora...");
-        connectToWhatsApp().catch(err => console.error("Erro no Baileys:", err));
-    }, 5000); 
+    console.log(`🚀 Servidor na porta ${PORT}`);
+    setTimeout(() => connectToWhatsApp(), 5000); 
 });
