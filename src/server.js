@@ -24,19 +24,23 @@ let qrCodeBase64 = null;
 let isConnected = false;
 let sock = null;
 
-// FUNÇÃO PARA LIMPAR OS ARQUIVOS DO VOLUME SEM APAGAR A PASTA
+// FUNÇÃO PARA LIMPAR OS ARQUIVOS DO VOLUME SEM TRAVAR O BACKEND
 function clearSessionFolder() {
-    const sessionDir = './auth_info_baileys';
+    const sessionDir = path.join(__dirname, 'auth_info_baileys');
     if (fs.existsSync(sessionDir)) {
-        const files = fs.readdirSync(sessionDir);
-        for (const file of files) {
-            try {
-                fs.unlinkSync(path.join(sessionDir, file));
-            } catch (e) {
-                console.log(`Arquivo ${file} estava sendo usado, ignorando...`);
+        try {
+            const files = fs.readdirSync(sessionDir);
+            for (const file of files) {
+                try {
+                    fs.unlinkSync(path.join(sessionDir, file));
+                } catch (e) {
+                    // Ignora se o arquivo estiver bloqueado
+                }
             }
+            console.log("🧹 Volume limpo via código. Pronto para novo QR.");
+        } catch (err) {
+            console.log("Aviso: Erro ao ler pasta de sessão, mas seguindo...");
         }
-        console.log("🧹 Volume limpo via código. Pronto para novo QR.");
     }
 }
 
@@ -70,22 +74,22 @@ async function connectToWhatsApp() {
             isConnected = false;
             const statusCode = lastDisconnect?.error?.output?.statusCode;
             
-            // Se o logout foi forçado (pelo botão ou celular)
+            // Se o logout foi feito (botão ou celular)
             if (statusCode === DisconnectReason.loggedOut) {
                 console.log("❌ Sessão encerrada. Resetando volume...");
                 qrCodeBase64 = null;
                 io.emit('qr', null);
                 io.emit('ready', false);
                 
-                clearSessionFolder(); // Limpa o volume automaticamente
+                clearSessionFolder(); // Limpa os arquivos internos
 
                 setTimeout(() => {
                     console.log("🔄 Gerando novo QR Code...");
                     connectToWhatsApp();
                 }, 3000);
             } else {
-                console.log("Reconectando...");
-                connectToWhatsApp();
+                console.log("🔄 Tentando reconectar automaticamente...");
+                setTimeout(() => connectToWhatsApp(), 5000);
             }
         } else if (connection === 'open') {
             console.log('🚀 WHATSAPP CONECTADO!');
@@ -99,28 +103,43 @@ async function connectToWhatsApp() {
 
 // --- ROTAS ---
 
+app.get('/', (req, res) => res.send('SimpleFlow Online! 🚀'));
+
 app.get('/status', (req, res) => res.json({ connected: isConnected }));
+
+app.get('/qr', (req, res) => res.json({ qr: qrCodeBase64 }));
 
 app.post('/disconnect', async (req, res) => {
     try {
+        console.log("Comando de desconexão recebido...");
         if (sock) {
-            console.log("Comando de desconexão recebido...");
-            await sock.logout(); // Isso dispara o 'connection.update' com logout
+            // Tenta deslogar, mas se falhar (já offline), ignora o erro
+            await sock.logout().catch(() => {}); 
+            sock.end();
             sock = null;
         }
-        res.json({ success: true });
-    } catch (err) {
-        // Se der erro no logout, forçamos a limpeza manual
+        
+        // Força a limpeza para garantir que o próximo deploy/boot peça o QR
         clearSessionFolder();
-        connectToWhatsApp();
+        isConnected = false;
+        qrCodeBase64 = null;
+        
+        res.json({ success: true, message: "Resetando conexão..." });
+    } catch (err) {
+        console.error("Erro no disconnect:", err);
         res.json({ success: true, message: "Reset forçado" });
     }
 });
 
-app.get('/qr', (req, res) => res.json({ qr: qrCodeBase64 }));
+app.get('/health', (req, res) => res.status(200).send('OK'));
+
+// --- INICIALIZAÇÃO ---
 
 const PORT = process.env.PORT || 8080;
+
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Servidor na porta ${PORT}`);
-    setTimeout(() => connectToWhatsApp(), 5000); 
+    setTimeout(() => {
+        connectToWhatsApp().catch(err => console.error("Erro no boot:", err));
+    }, 5000); 
 });
