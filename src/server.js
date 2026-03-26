@@ -61,30 +61,35 @@ app.post('/empresa', (req, res) => {
 });
 
 // ============================
-// 🎨 GERADOR DE CRIATIVO (NOVO)
+// 🎨 GERADOR DE CRIATIVO (CORRIGIDO)
 // ============================
 
-app.post('/generate-creative', async (req, res) => {
+app.post('/generate-creative-ai', async (req, res) => {
     try {
-        const { campanha, texto } = req.body;
+        console.log("🔥 ROTA /generate-creative-ai CHAMADA");
 
-        console.log("🎨 Gerando criativo...");
+        const { 
+            productImage, 
+            promoName, 
+            currentPrice, 
+            promoPrice 
+        } = req.body;
+
+        if (!productImage || !promoName || !promoPrice) {
+            return res.status(400).json({ error: "Dados obrigatórios faltando" });
+        }
 
         const dadosEmpresa = empresa || {};
 
-        const criativo = {
-            titulo: "🔥 Promoção Especial!",
-            descricao: texto || campanha || "Confira nossas ofertas incríveis!",
-            empresa: dadosEmpresa.nome || "",
-            telefone: dadosEmpresa.telefone || "",
-            instagram: dadosEmpresa.instagram || "",
-            endereco: dadosEmpresa.endereco || "",
-            status: "gerado"
-        };
-
+        // 🔥 TESTE INICIAL (sem IA ainda)
         res.json({
             success: true,
-            criativo
+            imageUrl: productImage,
+            info: {
+                titulo: promoName,
+                preco: promoPrice,
+                empresa: dadosEmpresa.nome || ""
+            }
         });
 
     } catch (err) {
