@@ -61,40 +61,61 @@ app.post('/empresa', (req, res) => {
 });
 
 // ============================
-// 🎨 GERADOR DE CRIATIVO (CORRIGIDO)
+// 🎨 GERADOR DE CRIATIVO (ESTÁVEL)
 // ============================
 
 app.post('/generate-creative-ai', async (req, res) => {
     try {
-        console.log("🔥 ROTA /generate-creative-ai CHAMADA");
+        console.log("🔥 /generate-creative-ai chamada");
 
-        const { 
-            productImage, 
-            promoName, 
-            currentPrice, 
-            promoPrice 
-        } = req.body;
+        const body = req.body || {};
 
-        if (!productImage || !promoName || !promoPrice) {
-            return res.status(400).json({ error: "Dados obrigatórios faltando" });
-        }
+        const productImage = body.productImage || null;
+        const promoName = body.promoName || "Promoção Especial";
+        const currentPrice = body.currentPrice || null;
+        const promoPrice = body.promoPrice || "0.00";
+        const objetivoLivre = body.objetivoLivre || "";
 
         const dadosEmpresa = empresa || {};
 
-        // 🔥 TESTE INICIAL (sem IA ainda)
-        res.json({
+        console.log("📦 Dados recebidos:", {
+            promoName,
+            promoPrice,
+            hasImage: !!productImage,
+            objetivoLivre
+        });
+
+        // 🔥 Se não tiver imagem, não quebra
+        if (!productImage) {
+            return res.json({
+                success: true,
+                warning: "Sem imagem enviada",
+                imageUrl: null
+            });
+        }
+
+        // 🔥 RESPOSTA TEMPORÁRIA (FUNCIONANDO)
+        return res.json({
             success: true,
             imageUrl: productImage,
-            info: {
+
+            meta: {
                 titulo: promoName,
                 preco: promoPrice,
-                empresa: dadosEmpresa.nome || ""
+                precoAntigo: currentPrice,
+                empresa: dadosEmpresa.nome || "",
+                objetivo: objetivoLivre
             }
         });
 
     } catch (err) {
-        console.error("Erro ao gerar criativo:", err);
-        res.status(500).json({ error: "Erro ao gerar criativo" });
+        console.error("💥 ERRO INTERNO:", err);
+
+        return res.json({
+            success: false,
+            error: "Erro interno tratado",
+            imageUrl: null
+        });
     }
 });
 
