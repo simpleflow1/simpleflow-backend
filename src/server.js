@@ -11,7 +11,7 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 
-// 🔥 MIDDLEWARES (corrigido limite 413)
+// 🔥 MIDDLEWARES
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ limit: "10mb", extended: true }));
 app.use(cors({ origin: "*" }));
@@ -44,20 +44,15 @@ if (fs.existsSync(EMPRESA_FILE)) {
     }
 }
 
-// GET empresa
 app.get('/empresa', (req, res) => {
     res.json(empresa);
 });
 
-// POST empresa
 app.post('/empresa', (req, res) => {
     try {
         empresa = req.body;
-
         fs.writeFileSync(EMPRESA_FILE, JSON.stringify(empresa, null, 2));
-
         console.log("✅ Empresa salva:", empresa.nome || "sem nome");
-
         res.json({ success: true });
     } catch (err) {
         console.error("Erro ao salvar empresa:", err);
@@ -66,7 +61,40 @@ app.post('/empresa', (req, res) => {
 });
 
 // ============================
-// 🧹 LIMPAR SESSÃO WHATSAPP
+// 🎨 GERADOR DE CRIATIVO (NOVO)
+// ============================
+
+app.post('/generate-creative', async (req, res) => {
+    try {
+        const { campanha, texto } = req.body;
+
+        console.log("🎨 Gerando criativo...");
+
+        const dadosEmpresa = empresa || {};
+
+        const criativo = {
+            titulo: "🔥 Promoção Especial!",
+            descricao: texto || campanha || "Confira nossas ofertas incríveis!",
+            empresa: dadosEmpresa.nome || "",
+            telefone: dadosEmpresa.telefone || "",
+            instagram: dadosEmpresa.instagram || "",
+            endereco: dadosEmpresa.endereco || "",
+            status: "gerado"
+        };
+
+        res.json({
+            success: true,
+            criativo
+        });
+
+    } catch (err) {
+        console.error("Erro ao gerar criativo:", err);
+        res.status(500).json({ error: "Erro ao gerar criativo" });
+    }
+});
+
+// ============================
+// 🧹 LIMPAR SESSÃO
 // ============================
 
 function clearSessionFolder() {
@@ -85,7 +113,7 @@ function clearSessionFolder() {
 }
 
 // ============================
-// 🤖 CONEXÃO WHATSAPP
+// 🤖 WHATSAPP
 // ============================
 
 async function connectToWhatsApp() {
@@ -138,25 +166,21 @@ async function connectToWhatsApp() {
 }
 
 // ============================
-// 📡 ROTAS API
+// 📡 ROTAS
 // ============================
 
-// Home
 app.get('/', (req, res) => {
     res.send('🚀 SimpleFlow Backend ONLINE');
 });
 
-// Status
 app.get('/status', (req, res) => {
     res.json({ connected: isConnected });
 });
 
-// QR Code
 app.get('/qr', (req, res) => {
     res.json({ qr: qrCodeBase64 });
 });
 
-// Enviar mensagem
 app.post('/send-message', async (req, res) => {
     const { number, message } = req.body;
 
@@ -177,7 +201,6 @@ app.post('/send-message', async (req, res) => {
     }
 });
 
-// Desconectar
 app.post('/disconnect', async (req, res) => {
     if (sock) {
         await sock.logout().catch(() => {});
@@ -191,11 +214,10 @@ app.post('/disconnect', async (req, res) => {
     res.json({ success: true });
 });
 
-// Health check
 app.get('/health', (req, res) => res.status(200).send('OK'));
 
 // ============================
-// 🚀 START SERVER
+// 🚀 START
 // ============================
 
 const PORT = process.env.PORT || 8080;
