@@ -61,7 +61,7 @@ app.post('/empresa', (req, res) => {
 });
 
 // ============================
-// 🎨 GERADOR DE CRIATIVO (ESTÁVEL)
+// 🎨 GERADOR DE CRIATIVO (MULTI IA + FALLBACK)
 // ============================
 
 app.post('/generate-creative-ai', async (req, res) => {
@@ -76,34 +76,97 @@ app.post('/generate-creative-ai', async (req, res) => {
         const promoPrice = body.promoPrice || "0.00";
         const objetivoLivre = body.objetivoLivre || "";
 
+        const usarLogo = body.usarLogo ?? true;
+        const usarTelefone = body.usarTelefone ?? true;
+        const usarInstagram = body.usarInstagram ?? true;
+
         const dadosEmpresa = empresa || {};
 
-        console.log("📦 Dados recebidos:", {
-            promoName,
-            promoPrice,
-            hasImage: !!productImage,
-            objetivoLivre
-        });
+        // 🧠 PROMPT
+        const prompt = `
+produto: ${promoName}.
+objetivo: ${objetivoLivre}.
 
-        // 🔥 Se não tiver imagem, não quebra
-        if (!productImage) {
-            return res.json({
-                success: true,
-                warning: "Sem imagem enviada",
-                imageUrl: null
-            });
+Criar arte publicitária moderna e profissional.
+
+REGRAS:
+- Fundo claro ou equilibrado
+- Cores baseadas no produto
+- NÃO usar dourado fixo
+- Estilo food marketing (apetitoso)
+- Tipografia moderna
+- Composição limpa
+- Iluminação de estúdio
+- Estilo Instagram Ads
+
+${usarTelefone ? `Telefone: ${dadosEmpresa.telefone || ""}` : ""}
+${usarInstagram ? `Instagram: ${dadosEmpresa.instagram || ""}` : ""}
+${usarLogo ? `Incluir logo da marca` : ""}
+
+Adicionar CTA forte (ex: peça agora)
+`;
+
+        // 🎯 POLLINATIONS
+        const generatePollinations = async () => {
+            const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}`;
+
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 7000);
+
+            try {
+                const response = await fetch(url, { method: 'HEAD', signal: controller.signal });
+                clearTimeout(timeout);
+
+                if (!response.ok) throw new Error("Falha Pollinations");
+
+                return url;
+            } catch (err) {
+                clearTimeout(timeout);
+                throw err;
+            }
+        };
+
+        // 🔁 RETRY
+        const tryGenerate = async (fn, attempts = 2) => {
+            for (let i = 0; i < attempts; i++) {
+                try {
+                    console.log(`🔄 Tentativa ${i + 1}`);
+                    const result = await fn();
+                    if (result) return result;
+                } catch (e) {
+                    console.log("❌ Falhou tentativa", i + 1);
+                }
+            }
+            return null;
+        };
+
+        // 🆘 FALLBACK
+        const fallbackImage = async () => {
+            console.log("🆘 Fallback acionado");
+
+            if (productImage) return productImage;
+
+            return "https://via.placeholder.com/512x512?text=Promo";
+        };
+
+        // 🚀 EXECUÇÃO
+        let imageUrl = await tryGenerate(generatePollinations, 2);
+
+        if (!imageUrl) {
+            imageUrl = await fallbackImage();
         }
 
-        // 🔥 RESPOSTA TEMPORÁRIA (FUNCIONANDO)
         return res.json({
             success: true,
-            imageUrl: productImage,
+            imageUrl,
 
             meta: {
                 titulo: promoName,
                 preco: promoPrice,
                 precoAntigo: currentPrice,
                 empresa: dadosEmpresa.nome || "",
+                telefone: usarTelefone ? dadosEmpresa.telefone : null,
+                instagram: usarInstagram ? dadosEmpresa.instagram : null,
                 objetivo: objetivoLivre
             }
         });
